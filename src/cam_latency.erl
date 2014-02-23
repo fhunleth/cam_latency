@@ -3,7 +3,7 @@
 -behaviour(gen_server).
 
 %% API
--export([start_link/0]).
+-export([start_link/0, start/0, stop/0]).
 
 %% gen_server callbacks
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -12,7 +12,8 @@
 -define(SERVER, ?MODULE).
 
 -record(state,
-        { reqid,
+        { reqid=none,
+	  timerid=none,
 	  frame_counter=0,
 	  buffer= <<>>
 	 }).
@@ -24,25 +25,39 @@
 start_link() ->
     gen_server:start_link({local, ?SERVER}, ?MODULE, [], []).
 
+start() ->
+    gen_server:cast(?SERVER, start).
+
+stop() ->
+    gen_server:cast(?SERVER, stop).
+
 %%%===================================================================
 %%% gen_server callbacks
 %%%===================================================================
 
 init([]) ->
-    {ok, RequestId} = httpc:request(get,
-				    {"http://nerves/video", []},
-				    [],
-				    [{sync, false}, {stream, self}]),
-    {ok, _} = timer:send_interval(10, timeout),
-    io:format("~n"),
-    {ok, #state{reqid=RequestId}}.
+    {ok, #state{}}.
 
 handle_call(_Request, _From, State) ->
     Reply = ok,
     {reply, Reply, State}.
 
-handle_cast(_Msg, State) ->
-    {noreply, State}.
+handle_cast(start, #state{reqid=none} = State) ->
+    {ok, RequestId} = httpc:request(get,
+				    {"http://nerves/video", []},
+				    [],
+				    [{sync, false}, {stream, self}]),
+    {ok, TimerId} = timer:send_interval(10, timeout),
+    io:format("~n"),
+    {noreply, State#state{reqid=RequestId,timerid=TimerId}};
+handle_cast(start, State) ->
+    % Already started
+    {noreply, State};
+handle_cast(stop, #state{reqid=RequestId, timerid=TimerId} = State) ->
+    httpc:cancel_request(RequestId),
+    {ok, cancel} = timer:cancel(TimerId),
+    {noreply, State#state{reqid=none,timerid=none}}.
+
 
 handle_info({http, {_RequestId, stream_start, _Headers}}, State) ->
     io:format("~nGot stream_start!!~n"),
@@ -50,7 +65,7 @@ handle_info({http, {_RequestId, stream_start, _Headers}}, State) ->
 handle_info({http, {_RequestId, stream, Body}},
 	    #state{buffer=Buffer, frame_counter=FrameCounter} = State) ->
     Timestamp = get_timestamp(),
-    {NewBuffer, Frames} = decode_frames(<<Buffer/binary, Body/binary>>),
+    {NewBuffer, Frames} = frame_decoder:decode(<<Buffer/binary, Body/binary>>),
     NewFrameCounter = write_frames(FrameCounter, Timestamp, Frames),
     {noreply, State#state{buffer=NewBuffer, frame_counter=NewFrameCounter}};
 handle_info({http, {_RequestId, stream_end, _Headers}}, State) ->
@@ -80,24 +95,5 @@ write_frames(FrameCounter, _Timestamp, []) ->
     FrameCounter;
 write_frames(FrameCounter, Timestamp, [Frame|T]) ->
     Filename = io_lib:format("frame_~p_~p.jpg", [FrameCounter, Timestamp]),
-    file:write_file(Filename, Frame),
+    ok = file:write_file(Filename, Frame),
     write_frames(FrameCounter + 1, Timestamp, T).
-
-%% Parse the multipart headers and assemble a list of frames
-decode_frames(Buffer) ->
-    {NewBuffer, FramesInReverse} = decode_frames(Buffer, []),
-    {NewBuffer, lists:reverse(FramesInReverse)}.
-
-decode_frames(Buffer, PreviousFrames) ->
-    Boundary = <<"foofoo">>,
-    case cow_multipart:parse_headers(Buffer, Boundary) of
-	{ok, _Headers, Rest} ->
-	    case cow_multipart:parse_body(Rest, Boundary) of
-		{done, Frame, NextPart} ->
-		    decode_frames(NextPart, [Frame|PreviousFrames]);
-		_ ->
-		    {Buffer, PreviousFrames}
-	    end;
-	_ ->
-	    {Buffer, PreviousFrames}
-    end.
