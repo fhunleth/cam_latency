@@ -83,7 +83,7 @@ write_frames(FrameCounter, Timestamp, [Frame|T]) ->
     file:write_file(Filename, Frame),
     write_frames(FrameCounter + 1, Timestamp, T).
 
-%% Parse the mime and assemble a list of frames
+%% Parse the multipart headers and assemble a list of frames
 decode_frames(Buffer) ->
     {NewBuffer, FramesInReverse} = decode_frames(Buffer, []),
     {NewBuffer, lists:reverse(FramesInReverse)}.
