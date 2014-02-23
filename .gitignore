@@ -1,0 +1,6 @@
+ebin
+*~
+deps
+.erlang.mk.packages.v1
+_rel
+relx

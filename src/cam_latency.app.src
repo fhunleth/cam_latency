@@ -1,0 +1,16 @@
+%% -*- mode: Erlang; fill-column: 80; comment-column: 75; -*-
+{application, cam_latency,
+ [
+  {description, "Camera latency measurement app"},
+  {vsn, "1.0.0"},
+  {modules, []},
+  {applications, [
+		  kernel,
+		  stdlib,
+		  inets,
+		  cowlib
+		 ]},
+  {mod, {cam_latency_app, []}},
+  {registered, [cam_latency]},
+  {env, []}
+ ]}.
