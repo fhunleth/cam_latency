@@ -8,7 +8,8 @@
 		  kernel,
 		  stdlib,
 		  inets,
-		  cowlib
+		  cowlib,
+		  'erlang-serial'
 		 ]},
   {mod, {cam_latency_app, []}},
   {registered, [cam_latency]},
