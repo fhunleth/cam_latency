@@ -65,10 +65,14 @@ handle_info({http, {_RequestId, stream, Body}},
 handle_info({http, {_RequestId, stream_end, _Headers}}, State) ->
     io:format("~nGot stream_end!!~n"),
     {stop, connection_closed, State};
-handle_info(timeout, #state{frame_counter=FrameCounter} = State) ->
+handle_info(timeout, #state{reqid=RequestId, timerid=TimerId, frame_counter=FrameCounter} = State) ->
     Fps = FrameCounter / 5.0,
     io:format("~p fps~n", [Fps]),
-    {noreply, State#state{frame_counter=0}}.
+    % Temp
+    httpc:cancel_request(RequestId),
+    timer:cancel(TimerId),
+    {stop, letsstop, State}.
+    %{noreply, State#state{frame_counter=0}}.
 
 
 terminate(_Reason, _State) ->
